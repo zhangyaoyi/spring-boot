@@ -22,6 +22,11 @@ jobs:
           java-version: |
             ${{ matrix.java.version }}
             17
+      - name: Configure git to avoid issues with line endings and long paths on Windows
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          git config --global core.autocrlf true
+          git config --global core.longPaths true
       - name: Check out code
         uses: actions/checkout@v4
       - name: Set up Gradle
