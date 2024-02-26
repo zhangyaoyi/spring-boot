@@ -33,7 +33,7 @@ jobs:
           GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_SECRET_ACCESS_KEY }}
           GRADLE_ENTERPRISE_CACHE_USERNAME: ${{ secrets.GRADLE_ENTERPRISE_CACHE_USER }}
           GRADLE_ENTERPRISE_CACHE_PASSWORD: ${{ secrets.GRADLE_ENTERPRISE_CACHE_PASSWORD }}
-        run: ./gradlew -Dorg.gradle.internal.launcher.welcomeMessageEnabled=false --no-daemon build publishAllPublicationsToDeploymentRepository -PdeploymentRepository=$(pwd)/distribution-repository -PtoolchainVersion=${{ matrix.java.major-version }} -Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.auto-download=false -Porg.gradle.java.installations.paths=$JAVA_HOME_${{ matrix.java.version }}_X64
+        run: ./gradlew -Dorg.gradle.internal.launcher.welcomeMessageEnabled=false --no-daemon build publishAllPublicationsToDeploymentRepository -PdeploymentRepository=$(pwd)/distribution-repository -PtoolchainVersion=${{ matrix.java.version }} -Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.auto-download=false -Porg.gradle.java.installations.paths=$JAVA_HOME_${{ matrix.java.version }}_X64
       - name: Print JVM thread dumps when cancelled
         uses: ./.github/actions/print-jvm-thread-dumps
         if: cancelled()
