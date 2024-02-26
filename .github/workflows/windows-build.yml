@@ -2,7 +2,7 @@ name: Windows Build
 on: push
 jobs:
   build:
-    name: 'Java 21 | Windows'
+    name: 'Java 17 | Windows'
     runs-on: 'windows-latest'
     if: ${{ github.repository == 'spring-projects/spring-boot' }}
     steps:
@@ -10,9 +10,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'liberica'
-          java-version: |
-            21
-            17
+          java-version: 17
       - name: Configure git
         run: |
           git config --global core.autocrlf true
@@ -30,4 +28,4 @@ jobs:
           GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_SECRET_ACCESS_KEY }}
           GRADLE_ENTERPRISE_CACHE_USERNAME: ${{ secrets.GRADLE_ENTERPRISE_CACHE_USER }}
           GRADLE_ENTERPRISE_CACHE_PASSWORD: ${{ secrets.GRADLE_ENTERPRISE_CACHE_PASSWORD }}
-        run: ./gradlew '-Dorg.gradle.internal.launcher.welcomeMessageEnabled=false' --no-daemon build -PtoolchainVersion=21 '-Dorg.gradle.java.installations.auto-detect=false' '-Dorg.gradle.java.installations.auto-download=false' '-Dorg.gradle.java.installations.paths=%JAVA_HOME_21_X64%'
+        run: ./gradlew '-Dorg.gradle.internal.launcher.welcomeMessageEnabled=false' --no-daemon build
