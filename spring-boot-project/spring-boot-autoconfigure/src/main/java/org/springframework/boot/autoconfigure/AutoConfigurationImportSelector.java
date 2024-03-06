@@ -479,7 +479,7 @@ public class AutoConfigurationImportSelector implements DeferredImportSelector, 
 
 	}
 
-	protected static class AutoConfigurationEntry {
+	protected static class  AutoConfigurationEntry {
 
 		private final List<String> configurations;
 
