@@ -114,7 +114,35 @@ void postProcessEnvironment(ConfigurableEnvironment environment, ResourceLoader 
 	resourceLoader = (resourceLoader != null) ? resourceLoader : new DefaultResourceLoader();
 	getConfigDataEnvironment(environment, resourceLoader, additionalProfiles).processAndApply();
 }
+```
 
+`List<ConfigDataLocation> locations = new ArrayList<>();`: 创建一个 `ConfigDataLocation` 类型的 `ArrayList`,用于存储配置数据的位置。
+
+1. `locations.add(ConfigDataLocation.of("optional:classpath:/;optional:classpath:/config/"));`: 向 `locations` 列表中添加一个 `ConfigDataLocation` 对象。`ConfigDataLocation.of()`
+   方法用于创建 `ConfigDataLocation` 对象,传入的参数是一个字符串,表示配置数据的位置。这里的位置是 `optional:classpath:/ 和 optional:classpath:/config/`,表示在类路径的根目录和 config 目录下查找配置文件,如果找不到则忽略。
+
+2. `locations.add(ConfigDataLocation.of("optional:file:./;optional:file:./config/;optional:file:./config/*/"));`: 向 `locations` 列表中再添加一个 `ConfigDataLocation`
+   对象。这里的位置是 `optional:file:./、optional:file:./config/ 和 optional:file:./config/*/`,表示在当前目录、config 目录以及 config 目录的所有子目录下查找配置文件,如果找不到则忽略。
+
+3. `DEFAULT_SEARCH_LOCATIONS = locations.toArray(new ConfigDataLocation[0]);`: 将 `locations` 列表转换为 `ConfigDataLocation` 类型的数组,并赋值给静态变量 `DEFAULT_SEARCH_LOCATIONS`
+   。这样 `DEFAULT_SEARCH_LOCATIONS` 就包含了所有默认的配置数据位置。
+
+总的来说,这段代码的作用是初始化一个名为 `DEFAULT_SEARCH_LOCATIONS` 的静态变量,它包含了一些默认的配置数据位置,用于在应用程序启动时加载配置文件。这些位置包括类路径的根目录、config 目录、当前目录、config 目录以及
+config 目录的所有子目录。如果在这些位置找不到配置文件,则会忽略
+
+```java
+// ConfigDataEnvironment.java
+static final ConfigDataLocation[] DEFAULT_SEARCH_LOCATIONS;
+
+static {
+	List<ConfigDataLocation> locations = new ArrayList<>();
+	locations.add(ConfigDataLocation.of("optional:classpath:/;optional:classpath:/config/"));
+	locations.add(ConfigDataLocation.of("optional:file:./;optional:file:./config/;optional:file:./config/*/"));
+	DEFAULT_SEARCH_LOCATIONS = locations.toArray(new ConfigDataLocation[0]);
+}
+```
+
+```java
 void processAndApply() {
 	ConfigDataImporter importer = new ConfigDataImporter(this.logFactory, this.notFoundAction, this.resolvers, this.loaders);
 	registerBootstrapBinder(this.contributors, null, DENY_INACTIVE_BINDING);
@@ -330,17 +358,13 @@ private List<StandardConfigDataResource> resolve(Set<StandardConfigDataReference
 `ConfigDataLoaders`的初始化是在`ConfigDataEnvironment`的构造函数中。
 
 ```java
-    this.loaders =new
-
-ConfigDataLoaders(logFactory, bootstrapContext, SpringFactoriesLoader.forDefaultResourceLocation(resourceLoader.getClassLoader()));
+    this.loaders =new ConfigDataLoaders(logFactory, bootstrapContext, SpringFactoriesLoader.forDefaultResourceLocation(resourceLoader.getClassLoader()));
 ```
 
 在`ConfigDataLoaders`中`List<ConfigDataLoader> loaders`被初始化。
 
 ```java
-    this.loaders =springFactoriesLoader.
-
-load(ConfigDataLoader .class, argumentResolver);
+    this.loaders = springFactoriesLoader.load(ConfigDataLoader .class, argumentResolver);
 ```
 
 ```properties
