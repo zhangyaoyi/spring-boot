@@ -141,6 +141,22 @@ static {
 	DEFAULT_SEARCH_LOCATIONS = locations.toArray(new ConfigDataLocation[0]);
 }
 ```
+`ConfigDataEnvironmentContributors` 是 Spring Boot 中的一个类,它的作用是在应用程序启动时为环境贡献配置数据。换句话说,它负责从各种来源(如配置文件、环境变量、命令行参数等)收集配置数据,并将其添加到 Spring
+的环境中,以便在应用程序中使用。
+
+下面是 `ConfigDataEnvironmentContributors` 的一些主要功能:
+
+1. 加载外部配置: `ConfigDataEnvironmentContributors` 会根据配置的位置(如 `application.properties` 或 `application.yml` 文件)加载外部配置数据,并将其添加到环境中。
+
+2. 处理配置文件: 它能够处理不同格式的配置文件,如 properties 文件和 YAML 文件,并将其转换为 Spring 的 `PropertySource` 对象。
+
+3. 合并配置数据: 如果存在多个配置源(如多个配置文件),`ConfigDataEnvironmentContributors` 会将它们合并为一个统一的配置视图,并解决任何潜在的冲突。
+
+4. 支持配置文件 profiles: 它支持 Spring 的 profile 功能,可以根据激活的 profile 加载特定的配置文件。
+
+5. 绑定配置数据: `ConfigDataEnvironmentContributors` 将配置数据绑定到 Spring 的 `Environment` 对象,这使得加载的配置数据在整个应用程序中可用,并可以通过 `@Value` 注解或 `Environment` 接口访问。。
+
+总之,`ConfigDataEnvironmentContributors` 在 Spring Boot 应用程序的启动过程中扮演着重要的角色,它负责收集和处理各种来源的配置数据,并将其提供给应用程序使用。这使得 Spring Boot 应用程序能够方便地外部化配置,并支持灵活的配置管理。
 
 ```java
 void processAndApply() {
@@ -355,16 +371,18 @@ private List<StandardConfigDataResource> resolve(Set<StandardConfigDataReference
 
 ### ConfigDataLoaders
 
-`ConfigDataLoaders`的初始化是在`ConfigDataEnvironment`的构造函数中。
-
 ```java
-    this.loaders =new ConfigDataLoaders(logFactory, bootstrapContext, SpringFactoriesLoader.forDefaultResourceLocation(resourceLoader.getClassLoader()));
+//`ConfigDataLoaders`的初始化是在`ConfigDataEnvironment`的构造函数中。    
+this.loaders =new
+
+ConfigDataLoaders(logFactory, bootstrapContext, SpringFactoriesLoader.forDefaultResourceLocation(resourceLoader.getClassLoader()));
 ```
 
-在`ConfigDataLoaders`中`List<ConfigDataLoader> loaders`被初始化。
-
 ```java
-    this.loaders = springFactoriesLoader.load(ConfigDataLoader .class, argumentResolver);
+//在`ConfigDataLoaders`中`List<ConfigDataLoader> loaders`被初始化。
+    this.loaders =springFactoriesLoader.
+
+load(ConfigDataLoader .class, argumentResolver);
 ```
 
 ```properties
@@ -405,3 +423,116 @@ public ConfigData load(ConfigDataLoaderContext context, StandardConfigDataResour
 	return new ConfigData(propertySources, options);
 }
 ```
+
+## 补充说明
+
+### ConfigDataImporter
+
+`ConfigDataImporter` 是 Spring Boot 中负责导入配置数据的核心组件。它的主要作用是从各种来源加载配置数据,并将其转换为 Spring 的 `PropertySource` 对象,以便在应用程序中使用。
+
+以下是 `ConfigDataImporter` 的一些关键职责:
+
+1. 处理配置数据位置: `ConfigDataImporter` 接收一组 `ConfigDataLocationResolvers`,用于解析配置数据的位置。这些位置可以是类路径上的文件、目录、URL 或特定的配置文件格式,如 `application.properties`
+   或 `application.yml`。
+
+2. 加载配置数据: 给定配置数据的位置,`ConfigDataImporter` 使用 `ConfigDataLoaders` 来加载实际的配置数据。每个 `ConfigDataLoader` 都知道如何从特定的源(如文件或 URL)加载配置数据。
+
+3. 创建 `PropertySource` 对象: 一旦配置数据被加载,`ConfigDataImporter` 会将其转换为一个或多个 `PropertySource` 对象。`PropertySource` 是一个键值对的容器,表示一组配置属性。
+
+总的来说,`ConfigDataImporter` 在 Spring Boot 的外部化配置处理过程中扮演着核心角色。它协调不同的组件,如位置解析器和数据加载器,以从各种源加载配置数据,并将其集成到 Spring 环境中,从而实现了 Spring Boot
+的强大和灵活的配置管理功能。
+
+### ConfigDataEnvironmentContributors
+
+#### 例子说明
+
+以一个具体的例子来说明 `ConfigDataEnvironmentContributors` 的作用。
+
+假设我们有一个 Spring Boot 应用程序,其目录结构如下:
+
+```
+myapp/
+  ├── src/
+  │   ├── main/
+  │   │   ├── java/
+  │   │   │   └── com/
+  │   │   │       └── example/
+  │   │   │           └── MyApplication.java
+  │   │   └── resources/
+  │   │       ├── application.properties
+  │   │       └── application-dev.properties
+  │   └── test/
+  └── config/
+      └── application-prod.properties
+```
+
+在这个例子中,我们有三个配置文件:
+
+1. `src/main/resources/application.properties`: 主配置文件,包含通用的配置属性。
+2. `src/main/resources/application-dev.properties`: 开发环境特定的配置文件。
+3. `config/application-prod.properties`: 生产环境特定的配置文件,位于外部的 `config` 目录中。
+
+现在,当我们启动这个 Spring Boot 应用程序时,`ConfigDataEnvironmentContributors` 会执行以下步骤:
+
+1. 加载主配置文件 `application.properties`,并将其中的配置属性添加到环境中。
+
+2. 如果激活了 `dev` profile,那么 `ConfigDataEnvironmentContributors` 会加载 `application-dev.properties` 文件,并将其中的配置属性添加到环境中,覆盖任何同名的属性。
+
+3. 如果激活了 `prod` profile,那么 `ConfigDataEnvironmentContributors` 会在外部的 `config` 目录中查找 `application-prod.properties` 文件,并将其中的配置属性添加到环境中,再次覆盖任何同名的属性。
+
+4. 最后,`ConfigDataEnvironmentContributors` 会将所有收集到的配置属性绑定到 Spring 的 `Environment` 对象,以便在应用程序中使用。
+
+在这个例子中,`ConfigDataEnvironmentContributors` 负责根据不同的 profile 和配置文件的位置,自动加载和合并配置属性,并将它们提供给 Spring 应用程序使用。这使得我们可以轻松地管理不同环境下的配置,而无需在代码中进行复杂的配置加载逻辑。
+
+#### 加载过程
+
+好的,让我们通过分析 Spring Boot 的源代码来了解 `ConfigDataEnvironmentContributors` 的加载过程。
+
+在 Spring Boot 应用程序启动时,会调用 `SpringApplication` 的 `run` 方法。在这个方法中,会创建一个 `ConfigurableEnvironment` 对象,并调用 `ConfigDataEnvironmentPostProcessor` 的 `postProcessEnvironment` 方法来处理配置数据。
+
+以下是 `ConfigDataEnvironmentPostProcessor` 的 `postProcessEnvironment` 方法的简化版本:
+
+```java
+public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
+	ConfigDataEnvironmentContributors contributors = getContributors(environment);
+	ConfigDataEnvironmentContributor contributor = contributors.getContributor(environment);
+	contributor.contribute(environment);
+}
+```
+
+这个方法首先通过 `getContributors` 方法获取 `ConfigDataEnvironmentContributors` 对象。然后,它根据当前环境调用 `getContributor` 方法获取一个 `ConfigDataEnvironmentContributor` 对象,并调用其 `contribute`
+方法来贡献配置数据到环境中。
+
+`ConfigDataEnvironmentContributors` 的 `getContributor` 方法如下:
+
+```java
+public ConfigDataEnvironmentContributor getContributor(ConfigurableEnvironment environment) {
+	ConfigDataLocationResolvers resolvers = createConfigDataLocationResolvers(environment);
+	ConfigDataLoaders loaders = createConfigDataLoaders(environment);
+	return new ConfigDataEnvironmentContributor(environment, resolvers, loaders);
+}
+```
+
+这个方法创建了两个重要的对象:
+
+1. `ConfigDataLocationResolvers`: 用于解析配置数据的位置。
+2. `ConfigDataLoaders`: 用于加载配置数据。
+
+然后,它创建一个新的 `ConfigDataEnvironmentContributor` 对象,并将环境、解析器和加载器传递给它。
+
+`ConfigDataEnvironmentContributor` 的 `contribute` 方法负责实际的配置数据加载过程:
+
+```java
+public void contribute(ConfigurableEnvironment environment) {
+	ConfigDataImporter importer = new ConfigDataImporter(this.resolvers, this.loaders);
+	ConfigDataEnvironmentContributors.importConfigData(environment, importer);
+}
+```
+
+这个方法创建一个 `ConfigDataImporter` 对象,并将解析器和加载器传递给它。然后,它调用 `ConfigDataEnvironmentContributors` 的 `importConfigData` 方法来导入配置数据。
+
+`importConfigData` 方法会使用 `ConfigDataImporter` 加载配置数据,并将其绑定到环境中。它会处理配置文件的加载、合并和覆盖等逻辑。
+
+总的来说,`ConfigDataEnvironmentContributors` 通过协调 `ConfigDataLocationResolvers`、`ConfigDataLoaders` 和 `ConfigDataImporter` 的工作,实现了从各种来源加载配置数据并将其贡献到 Spring 环境中的功能。这个过程是
+Spring Boot 自动配置的重要组成部分,使得开发者可以方便地外部化配置,并根据不同的环境和需求进行配置管理。
+
