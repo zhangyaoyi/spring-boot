@@ -96,6 +96,209 @@ public @interface SpringBootApplication {
 使用 `@Configuration` 注解,开发者可以以编程方式控制应用程序的配置和组装,提高了配置的可读性、可维护性和灵活性。它是 Spring 基于 Java 的配置方式的基石,与其他注解（如 `@Bean`、`@Autowired` 等）配合使用,构成了 Spring
 应用程序配置的完整生态系统。
 
+```java
+public class ConfigurationClassPostProcessor {
+
+	public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
+		//获取所有的bean names
+		String[] candidateNames = registry.getBeanDefinitionNames();
+		//遍历candidateNames，找出所有被标注@Configuration配置类
+		if (ConfigurationClassUtils.checkConfigurationClassCandidate(beanDef, this.metadataReaderFactory)) {
+			configCandidates.add(new BeanDefinitionHolder(beanDef, beanName));
+		}
+		//创建配置类解析器ConfigurationClassParser
+		ConfigurationClassParser parser = new ConfigurationClassParser(this.metadataReaderFactory, this.problemReporter, this.environment, this.resourceLoader, this.componentScanBeanNameGenerator, registry);
+		//解析配置类
+		parser.parse(candidates);
+		//获取解析后的配置类ConfigurationClass集合
+		Set<ConfigurationClass> configClasses = new LinkedHashSet<>(parser.getConfigurationClasses());
+		//创建ConfigurationClassBeanDefinitionReader
+		ConfigurationClassBeanDefinitionReader reader = new ConfigurationClassBeanDefinitionReader(registry, this.sourceExtractor, this.resourceLoader, this.environment, this.importBeanNameGenerator, parser.getImportRegistry());
+		//加载配置类中的BeanDefinition，并注册到BeanDefinitionRegistry中，这里的BeanDefinitionRegistry就是DefaultListableBeanFactory
+		this.reader.loadBeanDefinitions(configClasses);
+	}
+}
+
+public class ConfigurationClassParser {
+
+	protected void processConfigurationClass(ConfigurationClass configClass, Predicate<String> filter) throws IOException {
+		if (this.conditionEvaluator.shouldSkip(configClass.getMetadata(), ConfigurationPhase.PARSE_CONFIGURATION)) {
+			return;
+		}
+
+		ConfigurationClass existingClass = this.configurationClasses.get(configClass);
+		if (existingClass != null) {
+			if (configClass.isImported()) {
+				if (existingClass.isImported()) {
+					existingClass.mergeImportedBy(configClass);
+				}
+				// Otherwise ignore new imported config class; existing non-imported class overrides it.
+				return;
+			}
+			else {
+				// Explicit bean definition found, probably replacing an import.
+				// Let's remove the old one and go with the new one.
+				this.configurationClasses.remove(configClass);
+				this.knownSuperclasses.values().removeIf(configClass::equals);
+			}
+		}
+
+		// Recursively process the configuration class and its superclass hierarchy.
+		SourceClass sourceClass = null;
+		try {
+			sourceClass = asSourceClass(configClass, filter);
+			do {
+				sourceClass = doProcessConfigurationClass(configClass, sourceClass, filter);
+			}
+			while (sourceClass != null);
+		}
+		catch (IOException ex) {
+			throw new BeanDefinitionStoreException(
+					"I/O failure while processing configuration class [" + sourceClass + "]", ex);
+		}
+
+		this.configurationClasses.put(configClass, configClass);
+	}
+}
+```
+
+```java
+protected final SourceClass doProcessConfigurationClass(ConfigurationClass configClass, SourceClass sourceClass, Predicate<String> filter) throws IOException {
+
+	if (configClass.getMetadata().isAnnotated(Component.class.getName())) {
+		// Recursively process any member (nested) classes first
+		processMemberClasses(configClass, sourceClass, filter);
+	}
+
+	// Process any @PropertySource annotations
+	for (AnnotationAttributes propertySource : AnnotationConfigUtils.attributesForRepeatable(
+			sourceClass.getMetadata(), org.springframework.context.annotation.PropertySource.class,
+			PropertySources.class, true)) {
+		if (this.propertySourceRegistry != null) {
+			this.propertySourceRegistry.processPropertySource(propertySource);
+		}
+		else {
+			logger.info("Ignoring @PropertySource annotation on [" + sourceClass.getMetadata().getClassName() +
+					"]. Reason: Environment must implement ConfigurableEnvironment");
+		}
+	}
+
+	// Search for locally declared @ComponentScan annotations first.
+	Set<AnnotationAttributes> componentScans = AnnotationConfigUtils.attributesForRepeatable(
+			sourceClass.getMetadata(), ComponentScan.class, ComponentScans.class,
+			MergedAnnotation::isDirectlyPresent);
+
+	// Fall back to searching for @ComponentScan meta-annotations (which indirectly
+	// includes locally declared composed annotations).
+	if (componentScans.isEmpty()) {
+		componentScans = AnnotationConfigUtils.attributesForRepeatable(sourceClass.getMetadata(),
+				ComponentScan.class, ComponentScans.class, MergedAnnotation::isMetaPresent);
+	}
+
+	if (!componentScans.isEmpty() &&
+			!this.conditionEvaluator.shouldSkip(sourceClass.getMetadata(), ConfigurationPhase.REGISTER_BEAN)) {
+		for (AnnotationAttributes componentScan : componentScans) {
+			// The config class is annotated with @ComponentScan -> perform the scan immediately
+			Set<BeanDefinitionHolder> scannedBeanDefinitions =
+					this.componentScanParser.parse(componentScan, sourceClass.getMetadata().getClassName());
+			// Check the set of scanned definitions for any further config classes and parse recursively if needed
+			for (BeanDefinitionHolder holder : scannedBeanDefinitions) {
+				BeanDefinition bdCand = holder.getBeanDefinition().getOriginatingBeanDefinition();
+				if (bdCand == null) {
+					bdCand = holder.getBeanDefinition();
+				}
+				if (ConfigurationClassUtils.checkConfigurationClassCandidate(bdCand, this.metadataReaderFactory)) {
+					parse(bdCand.getBeanClassName(), holder.getBeanName());
+				}
+			}
+		}
+	}
+
+	// Process any @Import annotations
+	processImports(configClass, sourceClass, getImports(sourceClass), filter, true);
+
+	// Process any @ImportResource annotations
+	AnnotationAttributes importResource =
+			AnnotationConfigUtils.attributesFor(sourceClass.getMetadata(), ImportResource.class);
+	if (importResource != null) {
+		String[] resources = importResource.getStringArray("locations");
+		Class<? extends BeanDefinitionReader> readerClass = importResource.getClass("reader");
+		for (String resource : resources) {
+			String resolvedResource = this.environment.resolveRequiredPlaceholders(resource);
+			configClass.addImportedResource(resolvedResource, readerClass);
+		}
+	}
+
+	// Process individual @Bean methods
+	Set<MethodMetadata> beanMethods = retrieveBeanMethodMetadata(sourceClass);
+	for (MethodMetadata methodMetadata : beanMethods) {
+		configClass.addBeanMethod(new BeanMethod(methodMetadata, configClass));
+	}
+
+	// Process default methods on interfaces
+	processInterfaces(configClass, sourceClass);
+
+	// Process superclass, if any
+	if (sourceClass.getMetadata().hasSuperClass()) {
+		String superclass = sourceClass.getMetadata().getSuperClassName();
+		if (superclass != null && !superclass.startsWith("java") &&
+				!this.knownSuperclasses.containsKey(superclass)) {
+			this.knownSuperclasses.put(superclass, configClass);
+			// Superclass found, return its annotation metadata and recurse
+			return sourceClass.getSuperClass();
+		}
+	}
+
+	// No superclass -> processing is complete
+	return null;
+}
+```
+
+这段代码是 `ConfigurationClassParser` 类中的 `doProcessConfigurationClass` 方法,用于处理单个配置类。它接受一个 `ConfigurationClass` 对象、一个 `SourceClass` 对象和一个用于过滤的 `Predicate<String>`。
+
+让我们逐步分析这个方法的主要逻辑:
+
+1. 处理成员类:
+    - 如果配置类被 `@Component` 注解标记,则首先递归处理其成员类。
+    - 通过调用 `processMemberClasses` 方法处理配置类中的嵌套类。
+
+2. 处理 `@PropertySource` 注解:
+    - 获取配置类上的 `@PropertySource` 注解属性,并交给 `PropertySourceRegistry` 进行处理。
+    - 如果 `PropertySourceRegistry` 不存在,则记录一条忽略 `@PropertySource` 注解的信息日志。
+
+3. 搜索 `@ComponentScan` 注解:
+    - 首先在配置类上搜索直接声明的 `@ComponentScan` 注解。
+    - 如果没有找到直接声明的 `@ComponentScan` 注解,则搜索元注解中的 `@ComponentScan` 注解。
+
+4. 处理 `@ComponentScan` 注解:
+    - 如果找到了 `@ComponentScan` 注解,并且条件评估器允许在 `REGISTER_BEAN` 阶段处理该配置类,则进行以下操作:
+        - 使用 `ComponentScanParser` 解析 `@ComponentScan` 注解,获取扫描到的 Bean 定义。
+        - 对于每个扫描到的 Bean 定义,检查是否是配置类候选,如果是,则递归解析该配置类。
+
+5. 处理 `@Import` 注解:
+    - 调用 `processImports` 方法处理配置类上的 `@Import` 注解。
+    - 获取配置类上的 `@Import` 注解,并递归处理导入的类。
+
+6. 处理 `@ImportResource` 注解:
+    - 获取配置类上的 `@ImportResource` 注解属性。
+    - 对于每个 `@ImportResource` 注解指定的资源路径,将其添加到配置类的导入资源列表中。
+
+7. 处理 `@Bean` 方法:
+    - 检索配置类中的 `@Bean` 方法元数据。
+    - 对于每个 `@Bean` 方法,将其封装为 `BeanMethod` 对象,并添加到配置类中。
+
+8. 处理接口上的默认方法:
+    - 调用 `processInterfaces` 方法处理配置类实现的接口上的默认方法。
+
+9. 处理父类:
+    - 如果配置类有父类,并且父类不是 `java` 包下的类,且未被处理过,则将父类添加到已知的父类映射中,并返回父类的注解元数据进行递归处理。
+
+10. 如果没有父类,则处理完成,返回 `null`。
+
+总的来说,`doProcessConfigurationClass` 方法的主要作用是处理单个配置类,包括处理成员类、`@PropertySource`、`@ComponentScan`、`@Import`、`@ImportResource`、`@Bean` 方法、接口默认方法以及父类。它使用递归的方式处理配置类的层次结构,确保所有相关的配置都被解析和处理。
+
+这个方法是 `ConfigurationClassParser` 的核心逻辑之一,用于将配置类转换为 Spring 容器可以使用的 Bean 定义和配置信息。它与其他方法和组件协作,共同完成了 Spring 基于 Java 的配置类的解析和处理过程。
+
 ### 2. `@ComponentScan`
 
 `@ComponentScan` 是 Spring Framework 提供的一个重要注解,用于启用组件扫描功能。它的主要作用是自动发现和注册 Spring 容器中的 Bean。
