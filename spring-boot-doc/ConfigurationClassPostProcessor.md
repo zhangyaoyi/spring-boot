@@ -61,7 +61,71 @@
 通过 `ConfigurationClassPostProcessor` 的加载过程,Spring 实现了对 `@Configuration` 注解的类的处理,将其转换为 Bean 定义,并将其集成到 Spring 容器的管理中。这使得基于注解的配置成为 Spring
 应用程序开发的主流方式之一,提供了更加灵活和可读性更好的配置方式。
 
-## 2. AnnotationConfigUtils.registerAnnotationConfigProcessors
+## 2. ConfigurationClassParser
+
+上述代码是 `ConfigurationClassParser` 类中的 `parse` 方法,用于解析配置类候选对象并生成相应的 Bean 定义。让我们逐步分析代码的作用:
+
+1. 方法签名: `public void parse(Set<BeanDefinitionHolder> configCandidates)`
+    - 该方法接受一个 `BeanDefinitionHolder` 对象的集合作为参数,表示配置类的候选对象。
+
+2. 遍历配置类候选对象:
+    - 使用 `for` 循环遍历 `configCandidates` 集合中的每个 `BeanDefinitionHolder` 对象。
+    - `BeanDefinitionHolder` 是一个包装类,包含了 `BeanDefinition` 对象和相应的 Bean 名称。
+
+3. 获取 `BeanDefinition` 对象:
+    - 通过调用 `holder.getBeanDefinition()` 获取当前 `BeanDefinitionHolder` 对象关联的 `BeanDefinition` 对象。
+
+4. 根据 `BeanDefinition` 的类型进行解析:
+    - 如果 `BeanDefinition` 是 `AnnotatedBeanDefinition` 类型:
+        - 调用 `parse(annotatedBeanDef.getMetadata(), holder.getBeanName())` 方法解析注解元数据。
+        - `AnnotatedBeanDefinition` 表示通过注解定义的 Bean,可以访问其注解元数据。
+    - 如果 `BeanDefinition` 是 `AbstractBeanDefinition` 类型并且具有 `beanClass`:
+        - 调用 `parse(abstractBeanDef.getBeanClass(), holder.getBeanName())` 方法解析 Bean 的类型。
+        - `AbstractBeanDefinition` 是 `BeanDefinition` 的抽象基类,`hasBeanClass()` 方法用于判断是否存在 Bean 的类型信息。
+    - 否则,假设 `BeanDefinition` 具有 `beanClassName`:
+        - 调用 `parse(bd.getBeanClassName(), holder.getBeanName())` 方法解析 Bean 的类名。
+
+5. 处理解析过程中的异常:
+    - 如果在解析过程中抛出了 `BeanDefinitionStoreException`,直接重新抛出该异常。
+    - 如果抛出了其他异常,则包装成 `BeanDefinitionStoreException` 并抛出,提供更具体的错误信息,包括出错的配置类名称。
+
+6. 处理延迟导入选择器:
+    - 在解析完所有的配置类候选对象后,调用 `this.deferredImportSelectorHandler.process()` 方法处理延迟导入选择器。
+    - 延迟导入选择器是一种特殊的导入选择器,它们的处理被延迟到所有常规配置类都处理完之后。
+
+总的来说,这段代码的作用是遍历配置类候选对象,根据不同的 `BeanDefinition` 类型调用相应的解析方法,将配置类转换为 Bean 定义。在解析过程中,它还处理了可能出现的异常,并在最后处理延迟导入选择器。
+
+这是 `ConfigurationClassParser` 类的核心逻辑之一,用于将注解配置类转换为 Spring 容器可以管理的 Bean 定义,为后续的 Bean 实例化和依赖注入做准备。
+
+```java
+public void parse(Set<BeanDefinitionHolder> configCandidates) {
+	for (BeanDefinitionHolder holder : configCandidates) {
+		BeanDefinition bd = holder.getBeanDefinition();
+		try {
+			if (bd instanceof AnnotatedBeanDefinition annotatedBeanDef) {
+				parse(annotatedBeanDef.getMetadata(), holder.getBeanName());
+			}
+			else if (bd instanceof AbstractBeanDefinition abstractBeanDef && abstractBeanDef.hasBeanClass()) {
+				parse(abstractBeanDef.getBeanClass(), holder.getBeanName());
+			}
+			else {
+				parse(bd.getBeanClassName(), holder.getBeanName());
+			}
+		}
+		catch (BeanDefinitionStoreException ex) {
+			throw ex;
+		}
+		catch (Throwable ex) {
+			throw new BeanDefinitionStoreException(
+					"Failed to parse configuration class [" + bd.getBeanClassName() + "]", ex);
+		}
+	}
+
+	this.deferredImportSelectorHandler.process();
+}
+```
+
+## 3. AnnotationConfigUtils.registerAnnotationConfigProcessors
 
 `AnnotationConfigUtils.registerAnnotationConfigProcessors(this.registry)` 是 Spring Framework 中的一个重要方法,用于在应用程序上下文中注册与注解配置相关的后置处理器和 Bean 工厂后置处理器。
 
@@ -96,7 +160,7 @@
 通过调用 `AnnotationConfigUtils.registerAnnotationConfigProcessors(this.registry)`,Spring 确保了这些关键的后置处理器和 Bean 工厂后置处理器被正确注册,从而支持注解驱动的配置和 Bean 定义。这使得开发者可以使用注解来配置和定义
 Bean,简化了 Spring 应用程序的开发和配置过程。
 
-## 3. CachingMetadataReaderFactoryPostProcessor
+## 4. CachingMetadataReaderFactoryPostProcessor
 
 **1. SharedMetadataReaderFactoryContextInitializer**
 
