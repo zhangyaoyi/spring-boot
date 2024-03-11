@@ -299,6 +299,65 @@ protected final SourceClass doProcessConfigurationClass(ConfigurationClass confi
 
 这个方法是 `ConfigurationClassParser` 的核心逻辑之一,用于将配置类转换为 Spring 容器可以使用的 Bean 定义和配置信息。它与其他方法和组件协作,共同完成了 Spring 基于 Java 的配置类的解析和处理过程。
 
+```java
+    private void loadBeanDefinitionsForConfigurationClass(
+		ConfigurationClass configClass, TrackedConditionEvaluator trackedConditionEvaluator) {
+
+	if (trackedConditionEvaluator.shouldSkip(configClass)) {
+		String beanName = configClass.getBeanName();
+		if (StringUtils.hasLength(beanName) && this.registry.containsBeanDefinition(beanName)) {
+			this.registry.removeBeanDefinition(beanName);
+		}
+		this.importRegistry.removeImportingClass(configClass.getMetadata().getClassName());
+		return;
+	}
+
+	if (configClass.isImported()) {
+		registerBeanDefinitionForImportedConfigurationClass(configClass);
+	}
+	for (BeanMethod beanMethod : configClass.getBeanMethods()) {
+		loadBeanDefinitionsForBeanMethod(beanMethod);
+	}
+
+	loadBeanDefinitionsFromImportedResources(configClass.getImportedResources());
+	loadBeanDefinitionsFromRegistrars(configClass.getImportBeanDefinitionRegistrars());
+}
+```
+
+这段代码是 `ConfigurationClassBeanDefinitionReader` 类中的 `loadBeanDefinitionsForConfigurationClass` 方法,用于为给定的配置类加载 Bean 定义。它接受一个 `ConfigurationClass` 对象和一个 `TrackedConditionEvaluator`
+对象作为参数。
+
+让我们逐步分析这个方法的主要功能:
+
+1. 检查是否应该跳过配置类:
+    - 使用 `TrackedConditionEvaluator` 的 `shouldSkip` 方法评估是否应该跳过当前配置类。
+    - 如果应该跳过,则执行以下操作:
+        - 获取配置类的 Bean 名称。
+        - 如果 Bean 名称不为空且 Bean 定义已经存在于注册表中,则从注册表中移除该 Bean 定义。
+        - 从导入注册表中移除配置类的类名。
+        - 直接返回,不再继续处理该配置类。
+
+2. 处理导入的配置类:
+    - 如果当前配置类是通过 `@Import` 注解导入的,则调用 `registerBeanDefinitionForImportedConfigurationClass` 方法为导入的配置类注册 Bean 定义。
+
+3. 加载 `@Bean` 方法的 Bean 定义:
+    - 遍历配置类中的所有 `@Bean` 方法。
+    - 对于每个 `@Bean` 方法,调用 `loadBeanDefinitionsForBeanMethod` 方法加载其对应的 Bean 定义。
+
+4. 加载导入的资源中的 Bean 定义:
+    - 调用 `loadBeanDefinitionsFromImportedResources` 方法,加载配置类中通过 `@ImportResource` 注解导入的资源文件中的 Bean 定义。
+
+5. 加载通过注册器注册的 Bean 定义:
+    - 调用 `loadBeanDefinitionsFromRegistrars` 方法,加载配置类中通过 `ImportBeanDefinitionRegistrar` 注册的 Bean 定义。
+
+总的来说,`loadBeanDefinitionsForConfigurationClass` 方法的作用是为给定的配置类加载相关的 Bean 定义。它会先评估是否应该跳过该配置类,如果不跳过,则会处理导入的配置类、加载 `@Bean` 方法的 Bean 定义、加载导入资源中的
+Bean 定义以及通过注册器注册的 Bean 定义。
+
+这个方法是 `ConfigurationClassBeanDefinitionReader` 的核心方法之一,它与 `ConfigurationClassParser` 协同工作,将解析后的配置类转换为 Spring 容器中的 Bean 定义。通过递归处理导入的配置类和 `@Bean` 方法,它确保了所有相关的
+Bean 定义都被正确地加载和注册到 Spring 容器中。
+
+这个过程是 Spring 基于 Java 配置的核心实现,它允许开发者使用 `@Configuration` 类来定义和配置 Bean,并通过 `@Import`、`@ImportResource` 和 `ImportBeanDefinitionRegistrar` 等机制来扩展和定制配置。
+
 ### 2. `@ComponentScan`
 
 `@ComponentScan` 是 Spring Framework 提供的一个重要注解,用于启用组件扫描功能。它的主要作用是自动发现和注册 Spring 容器中的 Bean。
